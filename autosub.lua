@@ -1,69 +1,80 @@
---=============================================================================
--->>    SUBLIMINAL PATH:
---=============================================================================
---          This script uses Subliminal to download subtitles,
---          so make sure to specify your system's Subliminal location below:
-local subliminal = '/home/david/.local/bin/subliminal'
---=============================================================================
--->>    SUBTITLE LANGUAGE:
---=============================================================================
---          Specify languages in this order:
---          { 'language name', 'ISO-639-1', 'ISO-639-2' } !
---          (See: https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes)
-local languages = {
---          If subtitles are found for the first language,
---          other languages will NOT be downloaded,
---          so put your preferred language first:
-            { 'English', 'en', 'eng' },
-            { 'Dutch', 'nl', 'dut' },
---          { 'Spanish', 'es', 'spa' },
---          { 'French', 'fr', 'fre' },
---          { 'German', 'de', 'ger' },
---          { 'Italian', 'it', 'ita' },
---          { 'Portuguese', 'pt', 'por' },
---          { 'Polish', 'pl', 'pol' },
---          { 'Russian', 'ru', 'rus' },
---          { 'Chinese', 'zh', 'chi' },
---          { 'Arabic', 'ar', 'ara' },
-}
---=============================================================================
--->>    PROVIDER LOGINS:
---=============================================================================
---          These are completely optional and not required
---          for the functioning of the script!
---          If you use any of these services, simply uncomment it
---          and replace 'USERNAME' and 'PASSWORD' with your own:
-local logins = {
---          { '--addic7ed', 'USERNAME', 'PASSWORD' },
---          { '--legendastv', 'USERNAME', 'PASSWORD' },
---          { '--opensubtitles', 'USERNAME', 'PASSWORD' },
---          { '--subscenter', 'USERNAME', 'PASSWORD' },
-}
---=============================================================================
--->>    ADDITIONAL OPTIONS:
---=============================================================================
-local bools = {
+local options = {
+    --=============================================================================
+    -->>    SUBLIMINAL PATH:
+    --=============================================================================
+    --          This script uses Subliminal to download subtitles,
+    --          so make sure to specify your system's Subliminal location below:
+    subliminal = '/home/david/.local/bin/subliminal',
+    --=============================================================================
+    -->>    SUBTITLE LANGUAGE:
+    --=============================================================================
+    --          Specify languages in this order:
+    --          'language name 1,ISO-639-1,ISO-639-2;language name 2,ISO-639-1,ISO-639-2'
+    --          (See: https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes)
+    languages = 'English,en,eng;eng;Dutch,nl,dut',
+    --=============================================================================
+    -->>    PROVIDER LOGINS:
+    --=============================================================================
+    --          These are completely optional and not required
+    --          for the functioning of the script!
+    --          If you use any of these services, simply uncomment it
+    --          and replace 'USERNAME' and 'PASSWORD' with your own:
+    logins = {
+        --          { '--addic7ed', 'USERNAME', 'PASSWORD' },
+        --          { '--legendastv', 'USERNAME', 'PASSWORD' },
+        --          { '--opensubtitles', 'USERNAME', 'PASSWORD' },
+        --          { '--subscenter', 'USERNAME', 'PASSWORD' },
+    },
+    --=============================================================================
+    -->>    ADDITIONAL OPTIONS:
+    --=============================================================================
     auto = true,   -- Automatically download subtitles, no hotkeys required
     debug = false, -- Use `--debug` in subliminal command for debug output
-    force = true,  -- Force download; will overwrite existing subtitle files
+    force = false, -- Force download; will overwrite existing subtitle files
     utf8 = true,   -- Save all subtitle files as UTF-8
-}
-local excludes = {
+
+
     -- Movies with a path containing any of these strings/paths
     -- will be excluded from auto-downloading subtitles.
     -- Full paths are also allowed, e.g.:
     -- '/home/david/Videos',
-    'no-subs-dl',
-}
-local includes = {
+    excludes = 'no-subs-dl',
     -- If anything is defined here, only the movies with a path
     -- containing any of these strings/paths will auto-download subtitles.
     -- Full paths are also allowed, e.g.:
-    -- '/home/david/Videos',
+    includes = '/home/david/Videos',
 }
---=============================================================================
-local utils = require 'mp.utils'
 
+--=============================================================================
+local mp = require('mp')
+local utils = require 'mp.utils'
+local mpopt = require 'mp.options'
+
+mpopt.read_options(options, "autosub")
+
+local function split_with_semi(str)
+    local fields = {}
+    for field in str:gmatch('([^;]+)') do
+        fields[#fields + 1] = field
+    end
+    return fields
+end
+
+local function split_with_comma(str)
+    local fields = {}
+    for field in str:gmatch('([^,]+)') do
+        fields[#fields + 1] = field
+    end
+    return fields
+end
+
+local includes = split_with_comma(options.includes)
+local excludes = split_with_comma(options.excludes)
+local languages = split_with_semi(options.languages)
+
+for i, language in ipairs(languages) do
+    languages[i] = split_with_comma(language)
+end
 
 -- Download function: download the best subtitles in most preferred language
 function download_subs(language)
@@ -72,28 +83,28 @@ function download_subs(language)
         log('No Language found\n')
         return false
     end
-            
+
     log('Searching ' .. language[1] .. ' subtitles ...', 30)
 
     -- Build the `subliminal` command, starting with the executable:
-    local table = { args = { subliminal } }
+    local table = { args = { options.subliminal } }
     local a = table.args
 
-    for _, login in ipairs(logins) do
+    for _, login in ipairs(options.logins) do
         a[#a + 1] = login[1]
         a[#a + 1] = login[2]
         a[#a + 1] = login[3]
     end
-    if bools.debug then
+    if options.debug then
         -- To see `--debug` output start MPV from the terminal!
         a[#a + 1] = '--debug'
     end
 
     a[#a + 1] = 'download'
-    if bools.force then
+    if options.force then
         a[#a + 1] = '-f'
     end
-    if bools.utf8 then
+    if options.utf8 then
         a[#a + 1] = '-e'
         a[#a + 1] = 'utf-8'
     end
@@ -145,7 +156,7 @@ function control_downloads()
             sub_tracks[#sub_tracks + 1] = track
         end
     end
-    if bools.debug then -- Log subtitle properties to terminal:
+    if options.debug then -- Log subtitle properties to terminal:
         for _, track in ipairs(sub_tracks) do
             mp.msg.warn('Subtitle track', track['id'], ':\n{')
             for k, v in pairs(track) do
@@ -159,7 +170,9 @@ function control_downloads()
     for _, language in ipairs(languages) do
         if should_download_subs_in(language) then
             if download_subs(language) then return end -- Download successful!
-        else return end -- No need to download!
+        else
+            return
+        end -- No need to download!
     end
     log('No subtitles were found')
 end
@@ -169,12 +182,12 @@ function autosub_allowed()
     local duration = tonumber(mp.get_property('duration'))
     local active_format = mp.get_property('file-format')
 
-    if not bools.auto then
+    if not options.auto then
         mp.msg.warn('Automatic downloading disabled!')
         return false
     elseif duration < 900 then
         mp.msg.warn('Video is less than 15 minutes\n' ..
-                      '=> NOT auto-downloading subtitles')
+            '=> NOT auto-downloading subtitles')
         return false
     elseif directory:find('^http') then
         mp.msg.warn('Automatic subtitle downloading is disabled for web streaming')
@@ -183,7 +196,7 @@ function autosub_allowed()
         mp.msg.warn('Automatic subtitle downloading is disabled for cue files')
         return false
     else
-        local not_allowed = {'aiff', 'ape', 'flac', 'mp3', 'ogg', 'wav', 'wv', 'tta'}
+        local not_allowed = { 'aiff', 'ape', 'flac', 'mp3', 'ogg', 'wav', 'wv', 'tta' }
 
         for _, file_format in pairs(not_allowed) do
             if file_format == active_format then
@@ -193,7 +206,7 @@ function autosub_allowed()
         end
 
         for _, exclude in pairs(excludes) do
-            local escaped_exclude = exclude:gsub('%W','%%%0')
+            local escaped_exclude = exclude:gsub('%W', '%%%0')
             local excluded = directory:find(escaped_exclude)
 
             if excluded then
@@ -203,10 +216,11 @@ function autosub_allowed()
         end
 
         for i, include in ipairs(includes) do
-            local escaped_include = include:gsub('%W','%%%0')
+            local escaped_include = include:gsub('%W', '%%%0')
             local included = directory:find(escaped_include)
 
-            if included then break
+            if included then
+                break
             elseif i == #includes then
                 mp.msg.warn('This path is not included for auto-downloading subs')
                 return false
@@ -221,16 +235,16 @@ end
 function should_download_subs_in(language)
     for i, track in ipairs(sub_tracks) do
         local subtitles = track['external'] and
-          'subtitle file' or 'embedded subtitles'
+            'subtitle file' or 'embedded subtitles'
 
         if not track['lang'] and (track['external'] or not track['title'])
-          and i == #sub_tracks then
+            and i == #sub_tracks then
             local status = track['selected'] and ' active' or ' present'
             log('Unknown ' .. subtitles .. status)
             mp.msg.warn('=> NOT downloading new subtitles')
             return false -- Don't download if 'lang' key is absent
         elseif track['lang'] == language[3] or track['lang'] == language[2] or
-          (track['title'] and track['title']:lower():find(language[3])) then
+            (track['title'] and track['title']:lower():find(language[3])) then
             if not track['selected'] then
                 mp.set_property('sid', track['id'])
                 log('Enabled ' .. language[1] .. ' ' .. subtitles .. '!')
@@ -242,17 +256,16 @@ function should_download_subs_in(language)
         end
     end
     mp.msg.warn('No ' .. language[1] .. ' subtitles were detected\n' ..
-                '=> Proceeding to download:')
+        '=> Proceeding to download:')
     return true
 end
 
 -- Log function: log to both terminal and MPV OSD (On-Screen Display)
 function log(string, secs)
-    secs = secs or 2.5  -- secs defaults to 2.5 when secs parameter is absent
+    secs = secs or 2.5           -- secs defaults to 2.5 when secs parameter is absent
     mp.msg.warn(string)          -- This logs to the terminal
     mp.osd_message(string, secs) -- This logs to MPV screen
 end
-
 
 mp.add_key_binding('b', 'download_subs', download_subs)
 mp.add_key_binding('n', 'download_subs2', download_subs2)
